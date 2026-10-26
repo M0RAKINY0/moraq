@@ -1,0 +1,54 @@
+name: Bug report
+description: Something in moraq doesn't work the way it should.
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security problem? Don't file it here. Use the private report described in SECURITY.md.
+        Remove API keys from anything you paste.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what moraq did instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: The smallest code that shows the bug. A link to a repo or StackBlitz works too.
+      render: ts
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: moraq version or commit
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node version and runtime
+      placeholder: "Node 22.20.0 on Linux / Vercel / Bun 1.x"
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider involved
+      multiple: true
+      options:
+        - OpenAI
+        - Anthropic
+        - Gemini
+        - OpenAI-compatible
+        - Not provider-specific
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error output
+      description: Stack trace or error message. Strip keys first.
+      render: text

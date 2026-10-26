@@ -1,0 +1,32 @@
+{
+  "name": "moraq",
+  "version": "0.0.0",
+  "private": true,
+  "description": "AI gateway library for Node: one API across LLM providers, with fallbacks, rate limiting and caching.",
+  "keywords": [
+    "ai",
+    "llm",
+    "gateway",
+    "openai",
+    "anthropic",
+    "gemini",
+    "fallback",
+    "rate-limit",
+    "cache"
+  ],
+  "license": "MIT",
+  "author": "M0RAKINY0",
+  "homepage": "https://github.com/M0RAKINY0/moraq#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/M0RAKINY0/moraq.git"
+  },
+  "bugs": {
+    "url": "https://github.com/M0RAKINY0/moraq/issues"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {}
+}

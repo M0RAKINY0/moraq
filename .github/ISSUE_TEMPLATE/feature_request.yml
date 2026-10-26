@@ -1,0 +1,27 @@
+name: Feature request
+description: Suggest a feature or an API change. Discuss here before opening a PR.
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what stops you today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed API or behaviour
+      description: Show how you'd call it, if you have an idea.
+      render: ts
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Workarounds you've tried
+  - type: checkboxes
+    id: pr
+    attributes:
+      label: Contribution
+      options:
+        - label: I'd like to open the PR for this once the approach is agreed.

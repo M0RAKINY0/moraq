@@ -1,0 +1,23 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Secrets. Never commit real keys.
+.env
+.env.*
+!.env.example
+
+# Editors
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Local Claude Code settings
+.claude/settings.local.json
