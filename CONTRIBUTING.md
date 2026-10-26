@@ -43,9 +43,23 @@ npm ci
 - **No API keys in code, tests or fixtures.** Recorded responses must have keys and personal data stripped.
 - **Tests never call real provider APIs.** Use the fake `fetch` and recorded fixtures.
 
-## Commit messages
+## Commit messages and PR titles
 
-Use [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`, `test:`, `chore:`, `refactor:`. Mark breaking changes with `!`, e.g. `feat!: rename createMoraq option`.
+moraq uses [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+<type>(<optional scope>): <what changed>
+
+feat(cache): replay cached responses as a stream
+fix(anthropic): parse rate limit reset as RFC 3339
+feat!: rename createMoraq option
+```
+
+Types: `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `build`, `ci`, `chore`, `revert`, `style`. A `!` after the type marks a breaking change.
+
+PRs land as a single squashed commit whose message is the PR title, so **the PR title is what counts**. CI checks it and blocks the merge if it doesn't follow the format. Your individual commits inside the PR can be messy.
+
+`npm ci` also installs a git hook that checks each local commit message. Bypass it with `git commit --no-verify` for work-in-progress commits if you want; the PR title check still applies.
 
 ## Code of conduct
 

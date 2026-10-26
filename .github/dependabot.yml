@@ -7,6 +7,9 @@ updates:
     # Wait a week before proposing a new release, so a hijacked version has time to get caught and pulled.
     cooldown:
       default-days: 7
+    commit-message:
+      prefix: chore
+      include: scope
     groups:
       dev-dependencies:
         dependency-type: development
@@ -18,6 +21,9 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    commit-message:
+      prefix: chore
+      include: scope
     groups:
       actions:
         patterns: ["*"]
