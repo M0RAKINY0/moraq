@@ -27,10 +27,13 @@ npm ci
 4. Run the checks locally before pushing:
 
    ```sh
-   npm run lint --if-present
-   npm run typecheck --if-present
-   npm run test --if-present
+   npm run lint        # Biome. `npm run format` fixes what it can
+   npm run typecheck
+   npm test            # unit tests, no network
+   npm run test:redis  # starts Redis in Docker, then runs the Redis tests
    ```
+
+   `npm run redis:down` stops the Redis container. `npm run test:smoke` makes real API calls and only runs suites whose API key is set.
 
 5. Open the PR and fill in the template.
 
