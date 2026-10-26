@@ -8,6 +8,7 @@
 
 ## Checklist
 
+- [ ] PR title follows Conventional Commits (`feat: ...`, `fix(scope): ...`)
 - [ ] Linked to an issue that agreed on the approach (not needed for small fixes)
 - [ ] Tests added or updated for behaviour changes
 - [ ] `npm run lint`, `npm run typecheck` and `npm run test` pass locally
