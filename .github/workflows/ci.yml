@@ -21,6 +21,16 @@ jobs:
       fail-fast: false
       matrix:
         node: [22, 24]
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 1s
+          --health-timeout 3s
+          --health-retries 30
     steps:
       - uses: actions/checkout@v7
         with:
@@ -33,4 +43,7 @@ jobs:
       - run: npm run lint --if-present
       - run: npm run typecheck --if-present
       - run: npm run test --if-present
+      - run: npx vitest run --project redis
+        env:
+          REDIS_URL: redis://localhost:6379
       - run: npm run build --if-present
