@@ -1,6 +1,6 @@
-import { configDefaults, defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig, type ViteUserConfig } from 'vitest/config'
 
-export default defineConfig({
+const config: ViteUserConfig = defineConfig({
   test: {
     projects: [
       {
@@ -28,3 +28,5 @@ export default defineConfig({
     ],
   },
 })
+
+export default config

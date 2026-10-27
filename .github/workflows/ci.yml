@@ -47,3 +47,5 @@ jobs:
         env:
           REDIS_URL: redis://localhost:6379
       - run: npm run build --if-present
+      - run: npm run check:package
+      - run: npm run size
