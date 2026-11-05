@@ -91,7 +91,7 @@ export type ResponseFormat =
       }
     }
 
-export interface ChatCompletionCreateParams {
+export interface ChatCompletionCreateParamsBase {
   model: string
   messages: ChatCompletionMessageParam[]
   tools?: ChatCompletionTool[]
@@ -105,8 +105,32 @@ export interface ChatCompletionCreateParams {
   seed?: number | null
   frequency_penalty?: number | null
   presence_penalty?: number | null
-  stream?: boolean | null
 }
+
+export interface ChatCompletionCreateParamsNonStreaming extends ChatCompletionCreateParamsBase {
+  stream?: false | null
+}
+
+export interface ChatCompletionStreamOptions {
+  /** moraq always turns this on, so the last chunk carries `usage`. */
+  include_usage?: boolean
+}
+
+export interface ChatCompletionCreateParamsStreaming extends ChatCompletionCreateParamsBase {
+  stream: true
+  stream_options?: ChatCompletionStreamOptions | null
+}
+
+export type ChatCompletionCreateParams =
+  | ChatCompletionCreateParamsNonStreaming
+  | ChatCompletionCreateParamsStreaming
+
+export type ChatCompletionFinishReason =
+  | 'stop'
+  | 'length'
+  | 'tool_calls'
+  | 'content_filter'
+  | 'function_call'
 
 export interface ChatCompletionMessage {
   role: 'assistant'
@@ -118,7 +142,7 @@ export interface ChatCompletionMessage {
 export interface ChatCompletionChoice {
   index: number
   message: ChatCompletionMessage
-  finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | null
+  finish_reason: ChatCompletionFinishReason | null
   logprobs?: unknown
 }
 
@@ -142,6 +166,38 @@ export interface ChatCompletion {
   model: string
   choices: ChatCompletionChoice[]
   usage?: CompletionUsage
+  system_fingerprint?: string | null
+}
+
+export interface ChatCompletionChunkToolCall {
+  index: number
+  id?: string
+  type?: 'function'
+  function?: { name?: string; arguments?: string }
+}
+
+export interface ChatCompletionChunkDelta {
+  role?: 'assistant'
+  content?: string | null
+  refusal?: string | null
+  tool_calls?: ChatCompletionChunkToolCall[]
+}
+
+export interface ChatCompletionChunkChoice {
+  index: number
+  delta: ChatCompletionChunkDelta
+  finish_reason: ChatCompletionFinishReason | null
+  logprobs?: unknown
+}
+
+/** The last chunk of a stream has empty `choices` and carries `usage`. */
+export interface ChatCompletionChunk {
+  id: string
+  object: 'chat.completion.chunk'
+  created: number
+  model: string
+  choices: ChatCompletionChunkChoice[]
+  usage?: CompletionUsage | null
   system_fingerprint?: string | null
 }
 

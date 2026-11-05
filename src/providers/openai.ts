@@ -1,5 +1,6 @@
-import type { ProviderErrorKind } from '../errors.js'
-import type { ChatCompletion, ChatCompletionCreateParams } from '../types.js'
+import { MoraqProviderError, type ProviderErrorKind } from '../errors.js'
+import type { SSEEvent } from '../sse.js'
+import type { ChatCompletion, ChatCompletionChunk, ChatCompletionCreateParams } from '../types.js'
 import type { ProviderAdapter, ProviderRequest } from './types.js'
 
 export interface OpenAIAdapterOptions {
@@ -14,17 +15,49 @@ export function createOpenAIAdapter({
   return {
     id: 'openai',
     buildRequest(params: ChatCompletionCreateParams): ProviderRequest {
+      // Without include_usage, OpenAI streams carry no token counts.
+      const body = params.stream
+        ? { ...params, stream_options: { ...params.stream_options, include_usage: true } }
+        : params
       return {
         url: `${baseURL}/chat/completions`,
         init: {
           method: 'POST',
           headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-          body: JSON.stringify(params),
+          body: JSON.stringify(body),
         },
       }
     },
     parseResponse(json: unknown): ChatCompletion {
       return json as ChatCompletion
+    },
+    async *parseStream(events: AsyncIterable<SSEEvent>): AsyncIterable<ChatCompletionChunk> {
+      for await (const event of events) {
+        if (event.data === '[DONE]') return
+        let json: unknown
+        try {
+          json = JSON.parse(event.data)
+        } catch (error) {
+          throw new MoraqProviderError('openai sent a stream event that is not JSON', {
+            kind: 'unknown',
+            provider: 'openai',
+            body: event.data,
+            cause: error,
+          })
+        }
+        if (typeof json === 'object' && json !== null && 'error' in json) {
+          throw new MoraqProviderError('openai sent an error in the stream', {
+            kind: 'server',
+            provider: 'openai',
+            body: json,
+          })
+        }
+        yield json as ChatCompletionChunk
+      }
+      throw new MoraqProviderError('openai stream ended before [DONE]', {
+        kind: 'network',
+        provider: 'openai',
+      })
     },
     classifyError(status: number, body: unknown): ProviderErrorKind {
       const code = errorCode(body)

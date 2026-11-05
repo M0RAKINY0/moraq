@@ -7,6 +7,8 @@ export interface FakeResponse {
   body?: unknown
   /** Server-sent event payloads, sent one per chunk as `data: <payload>\n\n`. */
   sse?: string[]
+  /** Raw stream body, sent as these exact chunks. Use it to split events at awkward points. */
+  chunks?: string[]
 }
 
 export interface RecordedCall {
@@ -39,8 +41,9 @@ export function fakeFetch(...responses: FakeResponse[]): FakeFetch {
     if (!next) throw new Error(`fakeFetch: no response queued for call #${calls.length}`)
 
     const status = next.status ?? 200
-    if (next.sse) {
-      return new Response(sseStream(next.sse), {
+    const chunks = next.chunks ?? next.sse?.map((event) => `data: ${event}\n\n`)
+    if (chunks) {
+      return new Response(textStream(chunks), {
         status,
         headers: { 'content-type': 'text/event-stream', ...next.headers },
       })
@@ -59,11 +62,11 @@ export function fixture(path: string): string {
   return readFileSync(new URL(`../fixtures/${path}`, import.meta.url), 'utf8')
 }
 
-function sseStream(events: string[]): ReadableStream<Uint8Array> {
+function textStream(chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder()
   return new ReadableStream({
     start(controller) {
-      for (const event of events) controller.enqueue(encoder.encode(`data: ${event}\n\n`))
+      for (const chunk of chunks) controller.enqueue(encoder.encode(chunk))
       controller.close()
     },
   })
