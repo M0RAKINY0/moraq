@@ -2,7 +2,14 @@ import { MoraqConfigError, MoraqProviderError } from './errors.js'
 import { parseModel } from './model.js'
 import { createOpenAIAdapter } from './providers/openai.js'
 import type { ProviderAdapter } from './providers/types.js'
-import type { ChatCompletionCreateParams, MoraqChatCompletion } from './types.js'
+import { parseSSE } from './sse.js'
+import { MoraqStream } from './stream.js'
+import type {
+  ChatCompletionCreateParams,
+  ChatCompletionCreateParamsNonStreaming,
+  ChatCompletionCreateParamsStreaming,
+  MoraqChatCompletion,
+} from './types.js'
 
 export interface ProviderConfig {
   apiKey?: string
@@ -22,9 +29,18 @@ export interface Moraq {
   chat: {
     completions: {
       create(
-        params: ChatCompletionCreateParams,
+        params: ChatCompletionCreateParamsNonStreaming,
         options?: RequestOptions,
       ): Promise<MoraqChatCompletion>
+      /** Resolves once the provider accepts the request, so HTTP errors throw here, not mid-loop. */
+      create(
+        params: ChatCompletionCreateParamsStreaming,
+        options?: RequestOptions,
+      ): Promise<MoraqStream>
+      create(
+        params: ChatCompletionCreateParams,
+        options?: RequestOptions,
+      ): Promise<MoraqChatCompletion | MoraqStream>
     }
   }
 }
@@ -54,30 +70,40 @@ export function createMoraq(config: MoraqConfig): Moraq {
   async function execute(
     params: ChatCompletionCreateParams,
     options: RequestOptions,
-  ): Promise<MoraqChatCompletion> {
-    if (params.stream === true) {
-      throw new MoraqConfigError('Streaming is not supported yet')
-    }
+  ): Promise<MoraqChatCompletion | MoraqStream> {
     const target = parseModel(params.model)
     const adapter = adapters.get(target.provider)
     if (!adapter) {
       throw new MoraqConfigError(`Provider '${target.provider}' is not configured`)
     }
 
+    // Streams get their own controller so `stream.controller.abort()` works without a user signal.
+    const controller = params.stream ? new AbortController() : undefined
+    const signals = [options.signal, controller?.signal].filter((s) => s !== undefined)
+    const signal = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
+
     const { url, init } = adapter.buildRequest({ ...params, model: target.model })
     let response: Response
     try {
-      response = await fetchFn(url, {
-        ...init,
-        ...(options.signal !== undefined && { signal: options.signal }),
-      })
+      response = await fetchFn(url, { ...init, ...(signal !== undefined && { signal }) })
     } catch (error) {
-      if (options.signal?.aborted) throw error
+      if (signal?.aborted) throw error
       throw new MoraqProviderError(`Request to ${adapter.id} failed`, {
         kind: 'network',
         provider: adapter.id,
         cause: error,
       })
+    }
+
+    if (response.ok && controller) {
+      if (!response.body) {
+        throw new MoraqProviderError(`${adapter.id} returned an empty stream`, {
+          kind: 'network',
+          provider: adapter.id,
+        })
+      }
+      const info = { provider: adapter.id, cached: false, attempts: 1 }
+      return new MoraqStream(adapter.parseStream(parseSSE(response.body)), info, controller)
     }
 
     const body = await readBody(response)
@@ -99,7 +125,8 @@ export function createMoraq(config: MoraqConfig): Moraq {
   return {
     chat: {
       completions: {
-        create: (params, options = {}) => execute(params, options),
+        create: ((params: ChatCompletionCreateParams, options: RequestOptions = {}) =>
+          execute(params, options)) as Moraq['chat']['completions']['create'],
       },
     },
   }
