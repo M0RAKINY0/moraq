@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { createMoraq } from '../../src/index.js'
 
 // Groq speaks the OpenAI format and has a free tier, so it runs the OpenAI adapter against a real
-// server at no cost.
+// server at no cost. gpt-oss is a reasoning model, so it needs room to think before it answers.
 describe.skipIf(!process.env.GROQ_API_KEY)('groq smoke (OpenAI adapter)', () => {
-  const model = `openai/${process.env.MORAQ_SMOKE_GROQ_MODEL ?? 'llama-3.1-8b-instant'}`
+  const model = `openai/${process.env.MORAQ_SMOKE_GROQ_MODEL ?? 'openai/gpt-oss-20b'}`
   // Built per test: vitest runs this describe body even when skipped, and a missing key throws.
   const client = () =>
     createMoraq({
@@ -18,7 +18,7 @@ describe.skipIf(!process.env.GROQ_API_KEY)('groq smoke (OpenAI adapter)', () => 
   const messages = [{ role: 'user' as const, content: 'Say hi in one word.' }]
 
   it('gets a reply', async () => {
-    const res = await client().chat.completions.create({ model, messages, max_tokens: 5 })
+    const res = await client().chat.completions.create({ model, messages, max_tokens: 300 })
     expect(res.choices[0]?.message.content).toBeTruthy()
     expect(res.usage?.total_tokens).toBeGreaterThan(0)
   })
@@ -27,7 +27,7 @@ describe.skipIf(!process.env.GROQ_API_KEY)('groq smoke (OpenAI adapter)', () => 
     const stream = await client().chat.completions.create({
       model,
       messages,
-      max_tokens: 5,
+      max_tokens: 300,
       stream: true,
     })
     let text = ''
