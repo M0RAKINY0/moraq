@@ -15,11 +15,15 @@ export interface ProviderAdapter {
   id: string
   /** `params.model` arrives without the provider prefix. */
   buildRequest(params: ChatCompletionCreateParams): ProviderRequest
-  parseResponse(json: unknown): ChatCompletion
+  /** `params` is the same object `buildRequest` got, for adapters that emulate a feature. */
+  parseResponse(json: unknown, params: ChatCompletionCreateParams): ChatCompletion
   /**
    * Turns the provider's server-sent events into chunks. Throws `MoraqProviderError` for an
    * error event or a stream that ends before the provider says it's done.
    */
-  parseStream(events: AsyncIterable<SSEEvent>): AsyncIterable<ChatCompletionChunk>
+  parseStream(
+    events: AsyncIterable<SSEEvent>,
+    params: ChatCompletionCreateParams,
+  ): AsyncIterable<ChatCompletionChunk>
   classifyError(status: number, body: unknown, headers: Headers): ProviderErrorKind
 }

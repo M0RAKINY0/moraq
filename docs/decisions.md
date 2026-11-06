@@ -36,6 +36,14 @@ An open source npm library that solo developers import into their Node app. Ther
 - OpenAI-compatible adapter with presets: DeepSeek, Mistral, Groq, Together, OpenRouter, Ollama.
 - v2: AWS Bedrock, Azure OpenAI.
 
+### Translating to providers that differ from OpenAI
+
+Settled 2026-11-06, with the Anthropic adapter.
+
+- A required field OpenAI makes optional gets a configurable default. Anthropic's `max_tokens` defaults to 4096 (`providers.anthropic.defaultMaxTokens`).
+- Sampling settings with no equivalent are dropped without an error: `seed`, `frequency_penalty`, `presence_penalty`. Values outside the provider's range get clamped, e.g. Anthropic's `temperature` caps at 1.
+- Anything that changes the shape of the response must be honored or throw. Anthropic has no JSON mode, so moraq forces a call to a hidden `moraq_json_output` tool and returns its input as the message text. Combining `response_format` with `tools` throws `MoraqConfigError` for Anthropic.
+
 ## Routing and fallbacks
 
 - A route is an ordered list of `{ provider, model, retries }` targets.
