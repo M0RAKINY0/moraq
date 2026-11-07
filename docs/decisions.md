@@ -36,6 +36,14 @@ An open source npm library that solo developers import into their Node app. Ther
 - OpenAI-compatible adapter with presets: DeepSeek, Mistral, Groq, Together, OpenRouter, Ollama.
 - v2: AWS Bedrock, Azure OpenAI.
 
+### OpenAI-compatible providers
+
+Settled 2026-11-07.
+
+- xAI, Gemini and every preset run through the OpenAI adapter with their own base URL and key variable: `DEEPSEEK_API_KEY`, `MISTRAL_API_KEY`, `GROQ_API_KEY`, `TOGETHER_API_KEY`, `OPENROUTER_API_KEY`. Ollama needs no key.
+- Gemini uses Google's official OpenAI-compatible endpoint instead of the native `generateContent` API. It covers chat, streaming, tools, images and JSON schema. A native adapter can replace it later without changing the public API.
+- `providers.compatible` adds any other OpenAI-compatible server under a name of your choice, called as `<name>/<model>`.
+
 ### Translating to providers that differ from OpenAI
 
 Settled 2026-11-06, with the Anthropic adapter.

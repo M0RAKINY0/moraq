@@ -2,6 +2,11 @@ import { MoraqConfigError, MoraqProviderError } from './errors.js'
 import { parseModel } from './model.js'
 import { createAnthropicAdapter } from './providers/anthropic.js'
 import { createOpenAIAdapter } from './providers/openai.js'
+import {
+  OPENAI_COMPATIBLE_PRESETS,
+  type OpenAICompatiblePreset,
+  type OpenAICompatibleProvider,
+} from './providers/presets.js'
 import type { ProviderAdapter } from './providers/types.js'
 import { parseSSE } from './sse.js'
 import { MoraqStream } from './stream.js'
@@ -22,8 +27,22 @@ export interface AnthropicProviderConfig extends ProviderConfig {
   defaultMaxTokens?: number
 }
 
+/** Any server that speaks the OpenAI Chat Completions API. */
+export interface CompatibleProviderConfig {
+  baseURL: string
+  apiKey?: string
+  /** Set to false if the server rejects `stream_options`. Defaults to true. */
+  streamUsage?: boolean
+}
+
+export type ProvidersConfig = { [P in OpenAICompatibleProvider]?: ProviderConfig } & {
+  anthropic?: AnthropicProviderConfig
+  /** Your own OpenAI-compatible servers, called as `<name>/<model>`. */
+  compatible?: Record<string, CompatibleProviderConfig>
+}
+
 export interface MoraqConfig {
-  providers: { openai?: ProviderConfig; anthropic?: AnthropicProviderConfig }
+  providers: ProvidersConfig
   fetch?: typeof fetch
 }
 
@@ -55,15 +74,28 @@ export function createMoraq(config: MoraqConfig): Moraq {
   const fetchFn = config.fetch ?? globalThis.fetch
   const adapters = new Map<string, ProviderAdapter>()
 
-  const { openai, anthropic } = config.providers
-  if (openai) {
+  const { anthropic, compatible = {}, ...presets } = config.providers
+  for (const [id, preset] of Object.entries(OPENAI_COMPATIBLE_PRESETS) as Array<
+    [OpenAICompatibleProvider, OpenAICompatiblePreset]
+  >) {
+    const provider = presets[id]
+    if (!provider) continue
+    const apiKey = preset.envVar ? requireKey(id, provider, preset.envVar) : provider.apiKey
     adapters.set(
-      'openai',
+      id,
       createOpenAIAdapter({
-        apiKey: requireKey('openai', openai, 'OPENAI_API_KEY'),
-        ...(openai.baseURL !== undefined && { baseURL: openai.baseURL }),
+        id,
+        baseURL: provider.baseURL ?? preset.baseURL,
+        ...(apiKey !== undefined && { apiKey }),
+        ...(preset.streamUsage !== undefined && { streamUsage: preset.streamUsage }),
       }),
     )
+  }
+  for (const [id, provider] of Object.entries(compatible)) {
+    if (adapters.has(id) || id === 'anthropic') {
+      throw new MoraqConfigError(`providers.compatible.${id} clashes with a built-in provider`)
+    }
+    adapters.set(id, createOpenAIAdapter({ id, ...provider }))
   }
   if (anthropic) {
     adapters.set(
