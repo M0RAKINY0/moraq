@@ -1,3 +1,4 @@
+export type { CacheConfig } from './cache.js'
 export type {
   AnthropicProviderConfig,
   CompatibleProviderConfig,
@@ -5,7 +6,9 @@ export type {
   MoraqConfig,
   ProviderConfig,
   ProvidersConfig,
+  RequestEvent,
   RequestOptions,
+  RouteConfig,
 } from './client.js'
 export { createMoraq } from './client.js'
 export type { ProviderAttempt, ProviderErrorKind } from './errors.js'

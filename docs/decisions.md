@@ -116,6 +116,17 @@ Details settled 2026-11-07, with the limits:
 - Identical requests in flight at the same time share one provider call.
 - Never cached: errors, cancelled streams, tool-call turns.
 
+Details settled 2026-11-07, with the cache:
+
+- Order of checks per call: plan check, then cache, then rate limit, then the router. A cached answer still respects plan routes, and costs no quota.
+- The key leaves out `user`, `stream` and `stream_options`, so streamed and plain calls share entries. Hashing uses Web Crypto, not `node:crypto`, so it also runs on Bun, Deno and edge runtimes.
+- Only finished single-choice text answers get cached (`finish_reason` of `stop` or `length`).
+- A hit returns the stored `usage`, with `moraq.cached: true` and `attempts: 0`. Billing code should check `cached`.
+- A request that arrives while an identical one is running waits for it, up to `timeoutMs`, then makes its own call.
+- `scope: 'user'` on a call with no `user` skips the cache rather than sharing.
+- Per call, `create(params, { cache: false })` skips both lookup and storing. Per route, `{ targets, cache }` overrides the global setting.
+- `onRequest(event)` runs once per call when it finishes: `model`, `user`, `stream`, `provider`, `cached`, `attempts`, `usage`, `durationMs`, `error`. For streams it runs when the stream ends.
+
 ## Docs and examples
 
 - The main docs live on a separate docs website.
