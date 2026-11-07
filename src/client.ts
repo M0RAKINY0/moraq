@@ -85,7 +85,7 @@ export interface MoraqConfig {
   plans?: Record<string, PlanConfig>
   /**
    * Where limits (and later the cache) keep state. Defaults to `memoryStore()`, which is per
-   * process. Use `redisStore()` from `moraq/redis` when you run more than one instance.
+   * process. Use `redisStore()` from `@moraq/core/redis` when you run more than one instance.
    */
   store?: Store
   fetch?: typeof fetch

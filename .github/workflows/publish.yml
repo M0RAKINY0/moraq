@@ -55,8 +55,8 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          if npm view "moraq@$VERSION" version >/dev/null 2>&1; then
-            echo "moraq@$VERSION is already published, skipping."
+          if npm view "@moraq/core@$VERSION" version >/dev/null 2>&1; then
+            echo "@moraq/core@$VERSION is already published, skipping."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
 

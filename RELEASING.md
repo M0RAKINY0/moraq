@@ -11,7 +11,7 @@ A release is a GitHub Release. Publishing one with a tag like `v0.2.0` runs `.gi
 3. On GitHub, go to **Releases → Draft a new release**.
    - **Tag:** `v0.2.0`, created on `main`.
    - Click **Generate release notes**. The notes come from the PR titles, which follow Conventional Commits.
-   - Tick **Set as a pre-release** for versions like `v0.3.0-beta.1`. Those publish under the `next` npm tag, so `npm install moraq` doesn't pick them up.
+   - Tick **Set as a pre-release** for versions like `v0.3.0-beta.1`. Those publish under the `next` npm tag, so `npm install @moraq/core` doesn't pick them up.
 4. Click **Publish release**, then watch the **Publish** workflow under Actions.
 
 If a check fails, nothing gets published. Fix it on `main`, delete the release and its tag, and publish again.
@@ -28,11 +28,11 @@ npm's trusted publishing lets the workflow publish without an npm token. On npm 
    npm ci && npm run build
    npm version 0.1.0 --no-git-tag-version
    npm login
-   npm publish
+   npm publish --access public --provenance=false
    git checkout package.json package-lock.json
    ```
 
-3. On npmjs.com, open the `moraq` package, then **Settings → Trusted publishing**, and add GitHub Actions with:
+3. On npmjs.com, open the `@moraq/core` package, then **Settings → Trusted publishing**, and add GitHub Actions with:
    - Organization or user: `M0RAKINY0`
    - Repository: `moraq`
    - Workflow filename: `publish.yml`

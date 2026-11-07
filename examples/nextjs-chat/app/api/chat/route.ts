@@ -4,7 +4,7 @@ import {
   type Moraq,
   MoraqProvidersFailedError,
   type MoraqStream,
-} from 'moraq'
+} from '@moraq/core'
 
 // Created on the first request, not at import: `next build` loads this file on machines without the
 // API keys. After that it lives for the server process, so the cache and circuit breakers carry over.

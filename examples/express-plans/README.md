@@ -50,4 +50,4 @@ After 5 uncached questions in an hour, a free user gets `429` with a `Retry-Afte
 - The `catch` block: how each moraq error maps to an HTTP status.
 - The console: `onRequest` logs which provider answered and whether it came from the cache.
 
-This uses the default in-memory store, so limits reset when the server restarts. For more than one instance, pass `store: redisStore(redis)` from `moraq/redis`.
+This uses the default in-memory store, so limits reset when the server restarts. For more than one instance, pass `store: redisStore(redis)` from `@moraq/core/redis`.

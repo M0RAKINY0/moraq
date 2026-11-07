@@ -1,5 +1,5 @@
 import express from 'express'
-import { createMoraq, MoraqPlanError, MoraqProvidersFailedError, MoraqRateLimitError } from 'moraq'
+import { createMoraq, MoraqPlanError, MoraqProvidersFailedError, MoraqRateLimitError } from '@moraq/core'
 
 const ai = createMoraq({
   // Both have free tiers. Keys come from GEMINI_API_KEY and GROQ_API_KEY.

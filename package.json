@@ -1,5 +1,5 @@
 {
-  "name": "moraq",
+  "name": "@moraq/core",
   "version": "0.0.0",
   "description": "AI gateway library for Node: one API across LLM providers, with fallbacks, rate limiting and caching.",
   "keywords": [

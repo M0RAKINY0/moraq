@@ -18,7 +18,7 @@ export interface LimitState {
 
 /**
  * Where rate limits and the response cache keep their state. Use `memoryStore()` for one process,
- * or `redisStore()` from `moraq/redis` to share state across instances.
+ * or `redisStore()` from `@moraq/core/redis` to share state across instances.
  */
 export interface Store {
   get(key: string): Promise<string | undefined>
