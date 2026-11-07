@@ -1,4 +1,10 @@
-export type { Moraq, MoraqConfig, ProviderConfig, RequestOptions } from './client.js'
+export type {
+  AnthropicProviderConfig,
+  Moraq,
+  MoraqConfig,
+  ProviderConfig,
+  RequestOptions,
+} from './client.js'
 export { createMoraq } from './client.js'
 export type { ProviderErrorKind } from './errors.js'
 export { MoraqConfigError, MoraqError, MoraqProviderError } from './errors.js'

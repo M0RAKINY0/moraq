@@ -1,5 +1,6 @@
 import { MoraqConfigError, MoraqProviderError } from './errors.js'
 import { parseModel } from './model.js'
+import { createAnthropicAdapter } from './providers/anthropic.js'
 import { createOpenAIAdapter } from './providers/openai.js'
 import type { ProviderAdapter } from './providers/types.js'
 import { parseSSE } from './sse.js'
@@ -16,8 +17,13 @@ export interface ProviderConfig {
   baseURL?: string
 }
 
+export interface AnthropicProviderConfig extends ProviderConfig {
+  /** Used when a request has no `max_tokens`, since Anthropic requires one. Defaults to 4096. */
+  defaultMaxTokens?: number
+}
+
 export interface MoraqConfig {
-  providers: { openai?: ProviderConfig }
+  providers: { openai?: ProviderConfig; anthropic?: AnthropicProviderConfig }
   fetch?: typeof fetch
 }
 
@@ -49,19 +55,25 @@ export function createMoraq(config: MoraqConfig): Moraq {
   const fetchFn = config.fetch ?? globalThis.fetch
   const adapters = new Map<string, ProviderAdapter>()
 
-  const openai = config.providers.openai
+  const { openai, anthropic } = config.providers
   if (openai) {
-    const apiKey = openai.apiKey ?? process.env.OPENAI_API_KEY
-    if (!apiKey) {
-      throw new MoraqConfigError(
-        'Provider openai has no API key. Pass providers.openai.apiKey or set OPENAI_API_KEY',
-      )
-    }
     adapters.set(
       'openai',
       createOpenAIAdapter({
-        apiKey,
+        apiKey: requireKey('openai', openai, 'OPENAI_API_KEY'),
         ...(openai.baseURL !== undefined && { baseURL: openai.baseURL }),
+      }),
+    )
+  }
+  if (anthropic) {
+    adapters.set(
+      'anthropic',
+      createAnthropicAdapter({
+        apiKey: requireKey('anthropic', anthropic, 'ANTHROPIC_API_KEY'),
+        ...(anthropic.baseURL !== undefined && { baseURL: anthropic.baseURL }),
+        ...(anthropic.defaultMaxTokens !== undefined && {
+          defaultMaxTokens: anthropic.defaultMaxTokens,
+        }),
       }),
     )
   }
@@ -82,7 +94,8 @@ export function createMoraq(config: MoraqConfig): Moraq {
     const signals = [options.signal, controller?.signal].filter((s) => s !== undefined)
     const signal = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
 
-    const { url, init } = adapter.buildRequest({ ...params, model: target.model })
+    const providerParams = { ...params, model: target.model }
+    const { url, init } = adapter.buildRequest(providerParams)
     let response: Response
     try {
       response = await fetchFn(url, { ...init, ...(signal !== undefined && { signal }) })
@@ -103,7 +116,8 @@ export function createMoraq(config: MoraqConfig): Moraq {
         })
       }
       const info = { provider: adapter.id, cached: false, attempts: 1 }
-      return new MoraqStream(adapter.parseStream(parseSSE(response.body)), info, controller)
+      const chunks = adapter.parseStream(parseSSE(response.body), providerParams)
+      return new MoraqStream(chunks, info, controller)
     }
 
     const body = await readBody(response)
@@ -118,7 +132,7 @@ export function createMoraq(config: MoraqConfig): Moraq {
       })
     }
 
-    const completion = adapter.parseResponse(body)
+    const completion = adapter.parseResponse(body, providerParams)
     return { ...completion, moraq: { provider: adapter.id, cached: false, attempts: 1 } }
   }
 
@@ -130,6 +144,16 @@ export function createMoraq(config: MoraqConfig): Moraq {
       },
     },
   }
+}
+
+function requireKey(provider: string, config: ProviderConfig, envVar: string): string {
+  const apiKey = config.apiKey ?? process.env[envVar]
+  if (!apiKey) {
+    throw new MoraqConfigError(
+      `Provider ${provider} has no API key. Pass providers.${provider}.apiKey or set ${envVar}`,
+    )
+  }
+  return apiKey
 }
 
 async function readBody(response: Response): Promise<unknown> {
