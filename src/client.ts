@@ -1,4 +1,5 @@
 import { MoraqConfigError, MoraqError, MoraqProviderError } from './errors.js'
+import { createLimiter, type LimitStatus, type PlanConfig } from './limits.js'
 import { parseModel } from './model.js'
 import { createAdapters, type ProvidersConfig } from './providers/registry.js'
 import type { ProviderAdapter } from './providers/types.js'
@@ -9,6 +10,7 @@ import {
   type RouteTarget,
 } from './router.js'
 import { parseSSE } from './sse.js'
+import { memoryStore, type Store } from './store.js'
 import { MoraqStream } from './stream.js'
 import type {
   ChatCompletion,
@@ -17,6 +19,7 @@ import type {
   ChatCompletionCreateParamsNonStreaming,
   ChatCompletionCreateParamsStreaming,
   MoraqChatCompletion,
+  MoraqUser,
 } from './types.js'
 
 export type {
@@ -38,6 +41,13 @@ export interface MoraqConfig {
    * Defaults to 60000.
    */
   timeoutMs?: number
+  /** Rate limits per user plan. A call passes `user: { id, plan }` to be counted. */
+  plans?: Record<string, PlanConfig>
+  /**
+   * Where limits (and later the cache) keep state. Defaults to `memoryStore()`, which is per
+   * process. Use `redisStore()` from `moraq/redis` when you run more than one instance.
+   */
+  store?: Store
   fetch?: typeof fetch
 }
 
@@ -66,6 +76,10 @@ export interface Moraq {
       ): Promise<MoraqChatCompletion | MoraqStream>
     }
   }
+  limits: {
+    /** The user's remaining quota for each limit on their plan. Takes nothing. */
+    check(user: MoraqUser): Promise<LimitStatus[]>
+  }
 }
 
 type AttemptResult =
@@ -77,6 +91,8 @@ export function createMoraq(config: MoraqConfig): Moraq {
   const timeoutMs = config.timeoutMs ?? 60_000
   const adapters = createAdapters(config.providers)
   const routes = config.routes ?? {}
+  const store = config.store ?? memoryStore()
+  const limiter = createLimiter(config.plans ?? {}, store)
   const router = createRouter({
     ...(config.retry !== undefined && { retry: config.retry }),
     ...(config.circuitBreaker !== undefined && { circuitBreaker: config.circuitBreaker }),
@@ -89,6 +105,14 @@ export function createMoraq(config: MoraqConfig): Moraq {
         throw new MoraqConfigError(
           `Route '${name}' uses provider '${target.provider}', which is not configured`,
         )
+      }
+    }
+  }
+
+  for (const [name, plan] of Object.entries(config.plans ?? {})) {
+    for (const route of plan.routes ?? []) {
+      if (!routes[route]) {
+        throw new MoraqConfigError(`Plan '${name}' allows route '${route}', which is not defined`)
       }
     }
   }
@@ -175,17 +199,28 @@ export function createMoraq(config: MoraqConfig): Moraq {
     params: ChatCompletionCreateParams,
     options: RequestOptions,
   ): Promise<MoraqChatCompletion | MoraqStream> {
-    const targets = targetsFor(params.model)
+    // `user` is moraq's, never the provider's.
+    const { user, ...request } = params
+    const targets = targetsFor(request.model)
     // Streams get their own controller so `stream.controller.abort()` works without a user signal.
-    const controller = params.stream ? new AbortController() : undefined
+    const controller = request.stream ? new AbortController() : undefined
     const signals = [options.signal, controller?.signal].filter((s) => s !== undefined)
     const signal = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
 
-    const { result, attempts } = await router.run(
-      targets,
-      (target) => attempt(target, params, signal),
-      signal,
-    )
+    // One create() counts once, whatever retries or fallbacks happen inside it.
+    const refund = await limiter.reserve(user, request.model)
+    let routed: { result: AttemptResult; attempts: number }
+    try {
+      routed = await router.run(
+        targets,
+        (target) => attempt(target, request as ChatCompletionCreateParams, signal),
+        signal,
+      )
+    } catch (error) {
+      await refund()
+      throw error
+    }
+    const { result, attempts } = routed
     const info = { provider: result.provider, cached: false, attempts }
     if (result.type === 'stream') {
       return new MoraqStream(result.chunks, info, controller as AbortController)
@@ -199,6 +234,9 @@ export function createMoraq(config: MoraqConfig): Moraq {
         create: ((params: ChatCompletionCreateParams, options: RequestOptions = {}) =>
           execute(params, options)) as Moraq['chat']['completions']['create'],
       },
+    },
+    limits: {
+      check: (user) => limiter.check(user),
     },
   }
 }
