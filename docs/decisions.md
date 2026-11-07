@@ -9,7 +9,7 @@ An open source npm library that solo developers import into their Node app. Ther
 ## Runtime and packaging
 
 - Node 22+ only. ESM only. TypeScript strict. Build with tsdown.
-- One npm package with subpath imports `moraq` and `moraq/redis`. `ioredis` and `redis` are optional peer deps. No monorepo.
+- One npm package, `@moraq/core`, with subpath import `@moraq/core/redis`. (npm blocked the plain name `moraq` as too similar to `morgan` and `ora`.) `ioredis` and `redis` are optional peer deps. No monorepo.
 - Runtime deps: zero if possible, `eventsource-parser` at most. Call providers with built-in `fetch`, never with vendor SDKs.
 - MIT license.
 

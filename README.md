@@ -5,7 +5,7 @@ An AI gateway you import, not a server you run. moraq gives a Node app one API f
 > **Status: pre-release.** Not on npm yet. The API may still change before 1.0.
 
 ```ts
-import { createMoraq } from 'moraq'
+import { createMoraq } from '@moraq/core'
 
 const ai = createMoraq({
   providers: { openai: {}, anthropic: {} }, // keys from OPENAI_API_KEY, ANTHROPIC_API_KEY
@@ -48,7 +48,7 @@ It runs inside your app. No proxy, no extra service, no hosted dashboard. Reques
 Requires Node 22 or newer. moraq has no runtime dependencies.
 
 ```sh
-npm install moraq
+npm install @moraq/core
 ```
 
 ## Providers
@@ -190,7 +190,7 @@ Limits and the cache live in memory by default. That's fine for one long-running
 
 ```ts
 import { Redis } from 'ioredis' // or createClient() from 'redis'
-import { redisStore } from 'moraq/redis'
+import { redisStore } from '@moraq/core/redis'
 
 createMoraq({ providers: { openai: {} }, store: redisStore(new Redis(process.env.REDIS_URL)) })
 ```
