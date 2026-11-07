@@ -63,11 +63,13 @@ interface CompiledLimit {
 }
 
 export interface Limiter {
+  /** Throws if the user's plan is unknown or doesn't allow `model`. Takes nothing. */
+  authorize(user: MoraqUser | undefined, model: string): void
   /**
    * Takes one request from every limit on the user's plan, or throws without taking any.
    * Returns a function that gives them back.
    */
-  reserve(user: MoraqUser | undefined, model: string): Promise<() => Promise<void>>
+  reserve(user: MoraqUser | undefined): Promise<() => Promise<void>>
   check(user: MoraqUser): Promise<LimitStatus[]>
 }
 
@@ -101,8 +103,8 @@ export function createLimiter(plans: Record<string, PlanConfig>, store: Store): 
     `moraq:limit:${rule.max}/${rule.windowMs}/${rule.strategy}:${user.id}`
 
   return {
-    async reserve(user, model) {
-      if (!user) return async () => {}
+    authorize(user, model) {
+      if (!user) return
       const plan = planFor(user)
       if (plan.routes) {
         const route = model.startsWith('route:') ? model.slice('route:'.length) : undefined
@@ -112,7 +114,10 @@ export function createLimiter(plans: Record<string, PlanConfig>, store: Store): 
           )
         }
       }
-
+    },
+    async reserve(user) {
+      if (!user) return async () => {}
+      const plan = planFor(user)
       const now = Date.now()
       const taken: CompiledLimit[] = []
       const refund = async () => {
