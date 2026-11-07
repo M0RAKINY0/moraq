@@ -9,6 +9,7 @@ export type ProviderErrorKind =
   | 'context_length'
   | 'content_filter'
   | 'quota_exhausted'
+  | 'not_found'
   | 'unknown'
 
 export class MoraqError extends Error {
@@ -43,5 +44,25 @@ export class MoraqProviderError extends MoraqError {
     if (options.status !== undefined) this.status = options.status
     if (options.retryAfterMs !== undefined) this.retryAfterMs = options.retryAfterMs
     if (options.body !== undefined) this.body = options.body
+  }
+}
+
+export interface ProviderAttempt {
+  provider: string
+  model: string
+  kind: ProviderErrorKind
+  status?: number
+  message: string
+}
+
+/** Every target in a route failed. `attempts` lists each try in order. */
+export class MoraqProvidersFailedError extends MoraqError {
+  override name = 'MoraqProvidersFailedError'
+  readonly attempts: ProviderAttempt[]
+
+  constructor(attempts: ProviderAttempt[], options?: { cause?: unknown }) {
+    const tried = attempts.map((a) => `${a.provider}/${a.model} (${a.kind})`).join(', ')
+    super(`Every provider failed: ${tried}`, options)
+    this.attempts = attempts
   }
 }

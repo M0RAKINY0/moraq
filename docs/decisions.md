@@ -62,6 +62,16 @@ Settled 2026-11-06, with the Anthropic adapter.
 - Streams can fall back only until the first chunk reaches the user. After that, moraq stays on that target.
 - If every target fails, moraq throws `MoraqProvidersFailedError` with a list of every attempt (provider, model, error kind, status).
 
+Details settled 2026-11-07, with the router:
+
+- Defaults: 2 retries per target, backoff starting at 500 ms and capped at 8 s, a breaker that trips after 5 failures in a row for 30 s, and a 60 s timeout per attempt. All of these are configurable.
+- A `retry-after` longer than the backoff cap moves on to the next target instead of waiting.
+- 404 (unknown or retired model) skips to the next target, like a context-length error.
+- Direct `<provider>/<model>` calls get the same retries, just no fallback.
+- For streams, `create()` resolves when the first chunk arrives, not when the HTTP response starts. A provider that accepts the request and then fails before sending any text still falls back.
+- The timeout covers the wait for the response, or for a stream's first chunk. It never cuts off a stream that is already sending.
+- When a target trips its breaker mid-retry, the router stops retrying it. If every target in a route is tripped, moraq tries them anyway instead of failing without a call.
+
 ## Rate limiting
 
 This feature protects the developer's credits from their own end users. It does not manage provider quotas.

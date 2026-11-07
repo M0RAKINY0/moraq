@@ -74,6 +74,8 @@ export function createOpenAIAdapter({
       if (status === 400 && (code === 'content_filter' || code === 'content_policy_violation')) {
         return 'content_filter'
       }
+      // An unknown or retired model. Another target in the route may still work.
+      if (status === 404) return 'not_found'
       if (status >= 400 && status < 500) return 'bad_request'
       if (status === 503) return 'overloaded'
       if (status >= 500 && status < 600) return 'server'
