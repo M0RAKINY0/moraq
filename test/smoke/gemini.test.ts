@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { createMoraq } from '../../src/index.js'
 
-// Gemini 2.5 models think before answering, so they get room beyond the reply itself.
+// Gemini models think before answering, so they get room beyond the reply itself.
 describe.skipIf(!process.env.GEMINI_API_KEY)('gemini smoke', () => {
-  const model = `gemini/${process.env.MORAQ_SMOKE_GEMINI_MODEL ?? 'gemini-2.5-flash'}`
+  const model = `gemini/${process.env.MORAQ_SMOKE_GEMINI_MODEL ?? 'gemini-3.8-flash'}`
   // Built per test: vitest runs this describe body even when skipped, and a missing key throws.
   const client = () => createMoraq({ providers: { gemini: {} } })
   const messages = [{ role: 'user' as const, content: 'Say hi in one word.' }]
