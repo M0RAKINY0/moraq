@@ -91,8 +91,16 @@ export type ResponseFormat =
       }
     }
 
+/** Who is making the request. moraq checks their plan's limits. Never sent to the provider. */
+export interface MoraqUser {
+  id: string
+  plan: string
+}
+
 export interface ChatCompletionCreateParamsBase {
   model: string
+  /** Turns on rate limits for this call. Leave it out for admin scripts and cron jobs. */
+  user?: MoraqUser
   messages: ChatCompletionMessageParam[]
   tools?: ChatCompletionTool[]
   tool_choice?: ChatCompletionToolChoiceOption

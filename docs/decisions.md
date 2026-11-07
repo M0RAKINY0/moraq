@@ -95,6 +95,17 @@ This feature protects the developer's credits from their own end users. It does 
 - In-memory store by default. Docs must warn that serverless cold starts and multiple instances reset or split the counts.
 - `redisStore(client)` accepts `ioredis` or `node-redis`. Each limit check is one atomic Lua script. Upstash comes in v1.1.
 
+Details settled 2026-11-07, with the limits:
+
+- `Store` has `get`/`set` for the cache and `consume`/`peek`/`refund` for limits. The caller passes the clock (`now`), so every instance agrees on window boundaries.
+- `sliding` uses the two-counter approximation: the previous window's count fades out linearly. It's O(1) memory per user. One quirk: with `requests: 1`, a user can wait up to two windows.
+- `token-bucket` holds `requests` tokens and refills one every `per / requests`.
+- A request takes from each limit in order. If one denies it, the ones already taken get refunded, so a denied call costs nothing.
+- Limit keys are `moraq:limit:<requests>/<windowMs>/<strategy>:<userId>`, so changing a limit starts fresh counts.
+- Lua scripts get their keys from JS, so they work on Redis Cluster.
+- `user` is stripped from the request before it reaches the provider.
+- `plans[*].routes` naming a route that doesn't exist throws at `createMoraq()`.
+
 ## Caching
 
 - Off by default. The dev turns it on globally or per route, e.g. `cache: { ttl: '1h' }`.
