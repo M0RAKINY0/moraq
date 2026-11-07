@@ -1,7 +1,6 @@
 {
   "name": "moraq",
   "version": "0.0.0",
-  "private": true,
   "description": "AI gateway library for Node: one API across LLM providers, with fallbacks, rate limiting and caching.",
   "keywords": [
     "ai",
@@ -79,5 +78,9 @@
       "path": "dist/index.mjs",
       "limit": "10 kB"
     }
-  ]
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
 }
