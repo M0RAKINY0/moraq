@@ -233,7 +233,7 @@ Both use Gemini and Groq, which have free tiers.
 
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) first. Report security issues privately as described in [SECURITY.md](SECURITY.md). Design decisions are recorded in [docs/decisions.md](docs/decisions.md).
+Read [CONTRIBUTING.md](CONTRIBUTING.md) first. Report security issues privately as described in [SECURITY.md](SECURITY.md). Design decisions are recorded in [docs/decisions.md](docs/decisions.md), and the release process in [RELEASING.md](RELEASING.md).
 
 ## License
 
