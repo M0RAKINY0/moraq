@@ -1,48 +1,43 @@
-import { MoraqConfigError, MoraqProviderError } from './errors.js'
+import { MoraqConfigError, MoraqError, MoraqProviderError } from './errors.js'
 import { parseModel } from './model.js'
-import { createAnthropicAdapter } from './providers/anthropic.js'
-import { createOpenAIAdapter } from './providers/openai.js'
-import {
-  OPENAI_COMPATIBLE_PRESETS,
-  type OpenAICompatiblePreset,
-  type OpenAICompatibleProvider,
-} from './providers/presets.js'
+import { createAdapters, type ProvidersConfig } from './providers/registry.js'
 import type { ProviderAdapter } from './providers/types.js'
+import {
+  type CircuitBreakerConfig,
+  createRouter,
+  type RetryConfig,
+  type RouteTarget,
+} from './router.js'
 import { parseSSE } from './sse.js'
 import { MoraqStream } from './stream.js'
 import type {
+  ChatCompletion,
+  ChatCompletionChunk,
   ChatCompletionCreateParams,
   ChatCompletionCreateParamsNonStreaming,
   ChatCompletionCreateParamsStreaming,
   MoraqChatCompletion,
 } from './types.js'
 
-export interface ProviderConfig {
-  apiKey?: string
-  baseURL?: string
-}
-
-export interface AnthropicProviderConfig extends ProviderConfig {
-  /** Used when a request has no `max_tokens`, since Anthropic requires one. Defaults to 4096. */
-  defaultMaxTokens?: number
-}
-
-/** Any server that speaks the OpenAI Chat Completions API. */
-export interface CompatibleProviderConfig {
-  baseURL: string
-  apiKey?: string
-  /** Set to false if the server rejects `stream_options`. Defaults to true. */
-  streamUsage?: boolean
-}
-
-export type ProvidersConfig = { [P in OpenAICompatibleProvider]?: ProviderConfig } & {
-  anthropic?: AnthropicProviderConfig
-  /** Your own OpenAI-compatible servers, called as `<name>/<model>`. */
-  compatible?: Record<string, CompatibleProviderConfig>
-}
+export type {
+  AnthropicProviderConfig,
+  CompatibleProviderConfig,
+  ProviderConfig,
+  ProvidersConfig,
+} from './providers/registry.js'
 
 export interface MoraqConfig {
   providers: ProvidersConfig
+  /** Named fallback chains, called as `model: 'route:<name>'`. */
+  routes?: Record<string, RouteTarget[]>
+  retry?: RetryConfig
+  /** Skips a target that keeps failing. `false` turns it off. */
+  circuitBreaker?: CircuitBreakerConfig | false
+  /**
+   * How long one attempt may wait for the provider to respond, or for a stream's first chunk.
+   * Defaults to 60000.
+   */
+  timeoutMs?: number
   fetch?: typeof fetch
 }
 
@@ -57,7 +52,10 @@ export interface Moraq {
         params: ChatCompletionCreateParamsNonStreaming,
         options?: RequestOptions,
       ): Promise<MoraqChatCompletion>
-      /** Resolves once the provider accepts the request, so HTTP errors throw here, not mid-loop. */
+      /**
+       * Resolves once the first chunk arrives. Until then a failing provider can fall back to the
+       * next target in the route. After it, the stream stays on that provider.
+       */
       create(
         params: ChatCompletionCreateParamsStreaming,
         options?: RequestOptions,
@@ -70,102 +68,129 @@ export interface Moraq {
   }
 }
 
+type AttemptResult =
+  | { type: 'completion'; provider: string; completion: ChatCompletion }
+  | { type: 'stream'; provider: string; chunks: AsyncIterable<ChatCompletionChunk> }
+
 export function createMoraq(config: MoraqConfig): Moraq {
   const fetchFn = config.fetch ?? globalThis.fetch
-  const adapters = new Map<string, ProviderAdapter>()
+  const timeoutMs = config.timeoutMs ?? 60_000
+  const adapters = createAdapters(config.providers)
+  const routes = config.routes ?? {}
+  const router = createRouter({
+    ...(config.retry !== undefined && { retry: config.retry }),
+    ...(config.circuitBreaker !== undefined && { circuitBreaker: config.circuitBreaker }),
+  })
 
-  const { anthropic, compatible = {}, ...presets } = config.providers
-  for (const [id, preset] of Object.entries(OPENAI_COMPATIBLE_PRESETS) as Array<
-    [OpenAICompatibleProvider, OpenAICompatiblePreset]
-  >) {
-    const provider = presets[id]
-    if (!provider) continue
-    const apiKey = preset.envVar ? requireKey(id, provider, preset.envVar) : provider.apiKey
-    adapters.set(
-      id,
-      createOpenAIAdapter({
-        id,
-        baseURL: provider.baseURL ?? preset.baseURL,
-        ...(apiKey !== undefined && { apiKey }),
-        ...(preset.streamUsage !== undefined && { streamUsage: preset.streamUsage }),
-      }),
-    )
-  }
-  for (const [id, provider] of Object.entries(compatible)) {
-    if (adapters.has(id) || id === 'anthropic') {
-      throw new MoraqConfigError(`providers.compatible.${id} clashes with a built-in provider`)
+  for (const [name, targets] of Object.entries(routes)) {
+    if (targets.length === 0) throw new MoraqConfigError(`Route '${name}' has no targets`)
+    for (const target of targets) {
+      if (!adapters.has(target.provider)) {
+        throw new MoraqConfigError(
+          `Route '${name}' uses provider '${target.provider}', which is not configured`,
+        )
+      }
     }
-    adapters.set(id, createOpenAIAdapter({ id, ...provider }))
-  }
-  if (anthropic) {
-    adapters.set(
-      'anthropic',
-      createAnthropicAdapter({
-        apiKey: requireKey('anthropic', anthropic, 'ANTHROPIC_API_KEY'),
-        ...(anthropic.baseURL !== undefined && { baseURL: anthropic.baseURL }),
-        ...(anthropic.defaultMaxTokens !== undefined && {
-          defaultMaxTokens: anthropic.defaultMaxTokens,
-        }),
-      }),
-    )
   }
 
-  // Every call goes through here so later milestones can add limits, routing and caching.
-  async function execute(
+  function targetsFor(model: string): RouteTarget[] {
+    const parsed = parseModel(model)
+    if ('route' in parsed) {
+      const targets = routes[parsed.route]
+      if (!targets) throw new MoraqConfigError(`Route '${parsed.route}' is not defined`)
+      return targets
+    }
+    if (!adapters.has(parsed.provider)) {
+      throw new MoraqConfigError(`Provider '${parsed.provider}' is not configured`)
+    }
+    return [parsed]
+  }
+
+  /** One HTTP call to one target. Throws `MoraqProviderError` for anything the router can act on. */
+  async function attempt(
+    target: RouteTarget,
     params: ChatCompletionCreateParams,
-    options: RequestOptions,
-  ): Promise<MoraqChatCompletion | MoraqStream> {
-    const target = parseModel(params.model)
-    const adapter = adapters.get(target.provider)
-    if (!adapter) {
-      throw new MoraqConfigError(`Provider '${target.provider}' is not configured`)
-    }
-
-    // Streams get their own controller so `stream.controller.abort()` works without a user signal.
-    const controller = params.stream ? new AbortController() : undefined
-    const signals = [options.signal, controller?.signal].filter((s) => s !== undefined)
-    const signal = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
-
+    signal: AbortSignal | undefined,
+  ): Promise<AttemptResult> {
+    const adapter = adapters.get(target.provider) as ProviderAdapter
+    const timeout = new AbortController()
+    const timer = setTimeout(() => timeout.abort(), timeoutMs)
+    const attemptSignal = signal ? AbortSignal.any([signal, timeout.signal]) : timeout.signal
     const providerParams = { ...params, model: target.model }
-    const { url, init } = adapter.buildRequest(providerParams)
-    let response: Response
-    try {
-      response = await fetchFn(url, { ...init, ...(signal !== undefined && { signal }) })
-    } catch (error) {
-      if (signal?.aborted) throw error
-      throw new MoraqProviderError(`Request to ${adapter.id} failed`, {
-        kind: 'network',
-        provider: adapter.id,
-        cause: error,
-      })
-    }
 
-    if (response.ok && controller) {
+    try {
+      const { url, init } = adapter.buildRequest(providerParams)
+      const response = await fetchFn(url, { ...init, signal: attemptSignal })
+
+      if (!response.ok) {
+        const body = await readBody(response)
+        const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'))
+        throw new MoraqProviderError(`${adapter.id} returned HTTP ${response.status}`, {
+          kind: adapter.classifyError(response.status, body, response.headers),
+          provider: adapter.id,
+          status: response.status,
+          body,
+          ...(retryAfterMs !== undefined && { retryAfterMs }),
+        })
+      }
+
+      if (!params.stream) {
+        const completion = adapter.parseResponse(await readBody(response), providerParams)
+        return { type: 'completion', provider: adapter.id, completion }
+      }
       if (!response.body) {
         throw new MoraqProviderError(`${adapter.id} returned an empty stream`, {
           kind: 'network',
           provider: adapter.id,
         })
       }
-      const info = { provider: adapter.id, cached: false, attempts: 1 }
-      const chunks = adapter.parseStream(parseSSE(response.body), providerParams)
-      return new MoraqStream(chunks, info, controller)
-    }
-
-    const body = await readBody(response)
-    if (!response.ok) {
-      const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'))
-      throw new MoraqProviderError(`${adapter.id} returned HTTP ${response.status}`, {
-        kind: adapter.classifyError(response.status, body, response.headers),
+      // Wait for the first chunk, so an error before any text reaches the user can still fall back.
+      const iterator = adapter
+        .parseStream(parseSSE(response.body), providerParams)
+        [Symbol.asyncIterator]()
+      const first = await iterator.next()
+      return { type: 'stream', provider: adapter.id, chunks: prepend(first, iterator) }
+    } catch (error) {
+      if (signal?.aborted) throw error
+      if (timeout.signal.aborted) {
+        throw new MoraqProviderError(`${adapter.id} did not respond within ${timeoutMs} ms`, {
+          kind: 'timeout',
+          provider: adapter.id,
+          cause: error,
+        })
+      }
+      if (error instanceof MoraqError) throw error
+      throw new MoraqProviderError(`Request to ${adapter.id} failed`, {
+        kind: 'network',
         provider: adapter.id,
-        status: response.status,
-        body,
-        ...(retryAfterMs !== undefined && { retryAfterMs }),
+        cause: error,
       })
+    } finally {
+      clearTimeout(timer)
     }
+  }
 
-    const completion = adapter.parseResponse(body, providerParams)
-    return { ...completion, moraq: { provider: adapter.id, cached: false, attempts: 1 } }
+  // Every call goes through here. Rate limits and caching wrap this in later milestones.
+  async function execute(
+    params: ChatCompletionCreateParams,
+    options: RequestOptions,
+  ): Promise<MoraqChatCompletion | MoraqStream> {
+    const targets = targetsFor(params.model)
+    // Streams get their own controller so `stream.controller.abort()` works without a user signal.
+    const controller = params.stream ? new AbortController() : undefined
+    const signals = [options.signal, controller?.signal].filter((s) => s !== undefined)
+    const signal = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
+
+    const { result, attempts } = await router.run(
+      targets,
+      (target) => attempt(target, params, signal),
+      signal,
+    )
+    const info = { provider: result.provider, cached: false, attempts }
+    if (result.type === 'stream') {
+      return new MoraqStream(result.chunks, info, controller as AbortController)
+    }
+    return { ...result.completion, moraq: info }
   }
 
   return {
@@ -178,14 +203,20 @@ export function createMoraq(config: MoraqConfig): Moraq {
   }
 }
 
-function requireKey(provider: string, config: ProviderConfig, envVar: string): string {
-  const apiKey = config.apiKey ?? process.env[envVar]
-  if (!apiKey) {
-    throw new MoraqConfigError(
-      `Provider ${provider} has no API key. Pass providers.${provider}.apiKey or set ${envVar}`,
-    )
+/** Puts an already-read first result back in front of the rest of the iterator. */
+async function* prepend<T>(first: IteratorResult<T>, rest: AsyncIterator<T>): AsyncGenerator<T> {
+  try {
+    if (first.done) return
+    yield first.value
+    while (true) {
+      const next = await rest.next()
+      if (next.done) return
+      yield next.value
+    }
+  } finally {
+    // Closes the connection when the caller stops early.
+    await rest.return?.()
   }
-  return apiKey
 }
 
 async function readBody(response: Response): Promise<unknown> {

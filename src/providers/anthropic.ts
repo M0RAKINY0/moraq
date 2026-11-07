@@ -126,6 +126,8 @@ export function createAnthropicAdapter({
       }
       if (status === 400 && message.includes('prompt is too long')) return 'context_length'
       if (status === 400 && message.includes('credit balance')) return 'quota_exhausted'
+      // An unknown or retired model. Another target in the route may still work.
+      if (status === 404) return 'not_found'
       if (status >= 400 && status < 500) return 'bad_request'
       if (status === 529 || status === 503) return 'overloaded'
       if (status >= 500 && status < 600) return 'server'

@@ -31,4 +31,19 @@ describe.skipIf(!process.env.GROQ_API_KEY)('groq smoke (OpenAI adapter)', () => 
     expect(text).toBeTruthy()
     expect(total).toBeGreaterThan(0)
   })
+
+  it('falls back from a model that does not exist to one that does', async () => {
+    const ai = createMoraq({
+      providers: { groq: {} },
+      routes: {
+        chat: [
+          { provider: 'groq', model: 'moraq-no-such-model' },
+          { provider: 'groq', model: model.slice('groq/'.length) },
+        ],
+      },
+    })
+    const res = await ai.chat.completions.create({ model: 'route:chat', messages, max_tokens: 300 })
+    expect(res.choices[0]?.message.content).toBeTruthy()
+    expect(res.moraq.attempts).toBe(2)
+  })
 })
