@@ -4,28 +4,35 @@ import type { ChatCompletion, ChatCompletionChunk, ChatCompletionCreateParams } 
 import type { ProviderAdapter, ProviderRequest } from './types.js'
 
 export interface OpenAIAdapterOptions {
-  apiKey: string
+  /** Shows up in errors and `res.moraq.provider`. Defaults to 'openai'. */
+  id?: string
+  /** Optional for servers without auth, like a local Ollama. */
+  apiKey?: string
   baseURL?: string
+  /** Sends `stream_options.include_usage`. Turn off for servers that reject the field. */
+  streamUsage?: boolean
 }
 
+/** Works with OpenAI and with any server that speaks the OpenAI Chat Completions API. */
 export function createOpenAIAdapter({
+  id = 'openai',
   apiKey,
   baseURL = 'https://api.openai.com/v1',
-}: OpenAIAdapterOptions): ProviderAdapter {
+  streamUsage = true,
+}: OpenAIAdapterOptions = {}): ProviderAdapter {
   return {
-    id: 'openai',
+    id,
     buildRequest(params: ChatCompletionCreateParams): ProviderRequest {
       // Without include_usage, OpenAI streams carry no token counts.
-      const body = params.stream
-        ? { ...params, stream_options: { ...params.stream_options, include_usage: true } }
-        : params
+      const body =
+        params.stream && streamUsage
+          ? { ...params, stream_options: { ...params.stream_options, include_usage: true } }
+          : params
+      const headers: Record<string, string> = { 'content-type': 'application/json' }
+      if (apiKey) headers.authorization = `Bearer ${apiKey}`
       return {
         url: `${baseURL}/chat/completions`,
-        init: {
-          method: 'POST',
-          headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-          body: JSON.stringify(body),
-        },
+        init: { method: 'POST', headers, body: JSON.stringify(body) },
       }
     },
     parseResponse(json: unknown): ChatCompletion {
@@ -38,25 +45,25 @@ export function createOpenAIAdapter({
         try {
           json = JSON.parse(event.data)
         } catch (error) {
-          throw new MoraqProviderError('openai sent a stream event that is not JSON', {
+          throw new MoraqProviderError(`${id} sent a stream event that is not JSON`, {
             kind: 'unknown',
-            provider: 'openai',
+            provider: id,
             body: event.data,
             cause: error,
           })
         }
         if (typeof json === 'object' && json !== null && 'error' in json) {
-          throw new MoraqProviderError('openai sent an error in the stream', {
+          throw new MoraqProviderError(`${id} sent an error in the stream`, {
             kind: 'server',
-            provider: 'openai',
+            provider: id,
             body: json,
           })
         }
         yield json as ChatCompletionChunk
       }
-      throw new MoraqProviderError('openai stream ended before [DONE]', {
+      throw new MoraqProviderError(`${id} stream ended before [DONE]`, {
         kind: 'network',
-        provider: 'openai',
+        provider: id,
       })
     },
     classifyError(status: number, body: unknown): ProviderErrorKind {
@@ -76,8 +83,10 @@ export function createOpenAIAdapter({
 }
 
 function errorCode(body: unknown): unknown {
-  if (typeof body !== 'object' || body === null) return undefined
-  const error = (body as { error?: unknown }).error
+  // Some OpenAI-compatible servers (Gemini's among them) wrap the error object in an array.
+  const root = Array.isArray(body) ? body[0] : body
+  if (typeof root !== 'object' || root === null) return undefined
+  const error = (root as { error?: unknown }).error
   if (typeof error !== 'object' || error === null) return undefined
   return (error as { code?: unknown }).code
 }

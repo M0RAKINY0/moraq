@@ -4,17 +4,9 @@ import { createMoraq } from '../../src/index.js'
 // Groq speaks the OpenAI format and has a free tier, so it runs the OpenAI adapter against a real
 // server at no cost. gpt-oss is a reasoning model, so it needs room to think before it answers.
 describe.skipIf(!process.env.GROQ_API_KEY)('groq smoke (OpenAI adapter)', () => {
-  const model = `openai/${process.env.MORAQ_SMOKE_GROQ_MODEL ?? 'openai/gpt-oss-20b'}`
+  const model = `groq/${process.env.MORAQ_SMOKE_GROQ_MODEL ?? 'openai/gpt-oss-20b'}`
   // Built per test: vitest runs this describe body even when skipped, and a missing key throws.
-  const client = () =>
-    createMoraq({
-      providers: {
-        openai: {
-          apiKey: process.env.GROQ_API_KEY ?? '',
-          baseURL: 'https://api.groq.com/openai/v1',
-        },
-      },
-    })
+  const client = () => createMoraq({ providers: { groq: {} } })
   const messages = [{ role: 'user' as const, content: 'Say hi in one word.' }]
 
   it('gets a reply', async () => {
